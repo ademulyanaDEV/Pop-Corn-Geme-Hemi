@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pop Corn Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.6.2/ethers.umd.min.js"></script>
+    <style>
+        .popcorn-animation {
+            animation: popcornAnim 0.5s ease-out;
+        }
+
+        @keyframes popcornAnim {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .explode-animation {
+            animation: explodeAnim 0.5s ease-out;
+        }
+
+        @keyframes explodeAnim {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.5); opacity: 0.5; }
+            100% { transform: scale(0); opacity: 0; }
+        }
+
+        .explode-image {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            z-index: 10;
+            opacity: 1;
+            display: none;
+        }
+
+        /* Styling for Instructions Card */
+        .instructions-card {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            width: 300px;
+        }
+
+        /* New Animation for GIF moving left to right */
+        .moving-gif {
+            position: absolute;
+            top: 20%; /* Adjust the top position */
+            left: -250px; /* Start off-screen to the left */
+            animation: moveLeftToRight 15s linear infinite;
+            width: 200px; /* Adjust the size of the GIF */
+            height: auto;
+        }
+
+        @keyframes moveLeftToRight {
+            0% { left: -250px; }
+            100% { left: 100%; }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center h-screen bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
+    <div class="bg-white p-8 rounded-xl shadow-2xl text-center w-96 relative">
+        <h1 class="text-3xl font-extrabold mb-6 text-gray-800">Pop Corn Game</h1>
+        <button id="connectButton" class="w-full py-3 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition-all">
+            Connect Wallet
+        </button>
+        <p id="walletAddress" class="mt-4 text-lg font-medium text-gray-700"></p>
+        <p id="score" class="mt-4 text-xl font-bold text-gray-800">Score: 0</p>
+        <p id="remaining" class="mt-2 text-sm text-gray-500">Remaining Corn: 10</p>
+        <div class="mt-6">
+            <div id="cornContainer" class="w-32 h-32 mx-auto transition-all duration-500 relative">
+                <img id="cornImage" src="corn.png" alt="Corn" class="w-full h-full rounded-full" />
+            </div>
+        </div>
+        <button id="clickButton" class="mt-6 w-full py-3 bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600 transition-all" disabled>
+            Click Me!
+        </button>
+        <button id="claimButton" class="mt-6 w-full py-3 bg-yellow-500 text-white rounded-lg shadow-md hover:bg-yellow-600 transition-all hidden">
+            Claim Reward
+        </button>
+        <button id="instructionsButton" class="mt-6 w-full py-3 bg-purple-500 text-white rounded-lg shadow-md hover:bg-purple-600 transition-all">
+            Instructions
+        </button>
+    </div>
+
+    <div id="instructionsCard" class="instructions-card">
+        <h2 class="text-2xl font-bold mb-4">Game Instructions</h2>
+        <p class="text-gray-700 mb-2">1. Don't click the "Click Me!" button. Only click the "Corn" image when it changes to popcorn.</p>
+        <p class="text-gray-700 mb-2">2. The goal is to click on the popcorn when it appears and avoid clicking the button accidentally.</p>
+        <p class="text-gray-700 mb-2">3. Every successful click will increase your score and decrease the number of remaining corns.</p>
+        <p class="text-gray-700 mb-4">4. When all corns are used up, the game ends. You can claim your reward after finishing the game.</p>
+        <button id="closeInstructions" class="w-full py-2 bg-red-500 text-white rounded-lg shadow-md hover:bg-red-600 transition-all">
+            Close
+        </button>
+    </div>
+
+    <img id="explosionImage" src="ledakan.png" alt="Explosion" class="explode-image" />
+
+    <!-- Moving GIF -->
+    <img id="movingGif" src="cat-nyan-cat.gif" alt="Cat GIF" class="moving-gif" />
+
+    <script>
+        let score = 0;
+        let account;
+        let contract;
+        let remainingCorn = 10;
+        let canClick = false;
+        const contractAddress = "0x7216222FD015DdA0DDa23544E40bc1871858EDB4";
+        const contractABI = ["function mintReward(uint256 score) external", "function claimReward() public"];
+
+        document.getElementById('connectButton').addEventListener('click', async () => {
+            if (window.ethereum) {
+                const provider = new ethers.BrowserProvider(window.ethereum);
+                const signer = await provider.getSigner();
+                account = await signer.getAddress();
+                document.getElementById('walletAddress').innerText = `Connected: ${account.slice(0, 6)}...${account.slice(-4)}`;
+                contract = new ethers.Contract(contractAddress, contractABI, signer);
+                document.getElementById('clickButton').disabled = false;
+                setTimeout(transformToPopcorn, Math.random() * 3000 + 2000);
+            } else {
+                alert('MetaMask is not installed. Please install MetaMask.');
+            }
+        });
+
+        document.getElementById('clickButton').addEventListener('click', () => {
+            if (canClick) {
+                score++;
+                remainingCorn--;
+                document.getElementById('score').innerText = `Score: ${score}`;
+                document.getElementById('remaining').innerText = `Remaining Corn: ${remainingCorn}`;
+                canClick = false;
+                document.getElementById('cornImage').src = 'corn.png';
+                if (remainingCorn === 0) endGame();
+                else setTimeout(transformToPopcorn, Math.random() * 3000 + 2000);
+            } else {
+                handleFailedClick();
+            }
+        });
+
+        function transformToPopcorn() {
+            if (remainingCorn > 0) {
+                canClick = true;
+                document.getElementById('cornImage').src = 'popcorn.png';
+                document.getElementById('cornImage').classList.add('popcorn-animation');
+            }
+        }
+
+        function handleFailedClick() {
+            document.getElementById('explosionImage').style.display = 'block';
+            document.getElementById('explosionImage').classList.add('explode-animation');
+            setTimeout(() => {
+                document.getElementById('explosionImage').style.display = 'none';
+            }, 500);
+            remainingCorn--;
+            document.getElementById('remaining').innerText = `Remaining Corn: ${remainingCorn}`;
+            if (remainingCorn === 0) endGame();
+            else setTimeout(transformToPopcorn, Math.random() * 3000 + 2000);
+        }
+
+        function endGame() {
+            alert(`Game Over! Your final score: ${score}`);
+            document.getElementById('claimButton').classList.remove('hidden');
+        }
+
+        document.getElementById('claimButton').addEventListener('click', async () => {
+            try {
+                const mintTx = await contract.mintReward(score);
+                await mintTx.wait();
+                alert("Reward claimed successfully!");
+            } catch (err) {
+                alert("Mint failed: " + err.message);
+            }
+            resetGame();
+        });
+
+        function resetGame() {
+            score = 0;
+            remainingCorn = 10;
+            document.getElementById('score').innerText = `Score: ${score}`;
+            document.getElementById('remaining').innerText = `Remaining Corn: 10`;
+            document.getElementById('claimButton').classList.add('hidden');
+            document.getElementById('cornImage').src = 'corn.png';
+            setTimeout(transformToPopcorn, Math.random() * 3000 + 2000);
+        }
+
+        // Instructions Button
+        document.getElementById('instructionsButton').addEventListener('click', () => {
+            document.getElementById('instructionsCard').style.display = 'block';
+        });
+
+        // Close Instructions Card
+        document.getElementById('closeInstructions').addEventListener('click', () => {
+            document.getElementById('instructionsCard').style.display = 'none';
+        });
+    </script>
+</body>
+</html>
